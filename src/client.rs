@@ -226,13 +226,13 @@ impl<LA, TA> ShadowTlsClient<LA, TA> {
         // stage2:
         match server_random {
             None => {
-                tracing::warn!("traffic hijacking detected");
+                tracing::warn!("traffic hijacked or TLS1.3 is not supported");
                 let tls_stream =
                     monoio_rustls_fork_shadow_tls::ClientTlsStream::new(stream, session);
                 if let Err(e) = fake_request(tls_stream).await {
-                    bail!("traffic hijacked, fake request fail: {e}");
+                    bail!("traffic hijacked or TLS1.3 is not supported, fake request fail: {e}");
                 }
-                bail!("traffic hijacked, but fake request success");
+                bail!("traffic hijacked or TLS1.3 is not supported, but fake request success");
             }
             Some(sr) => {
                 drop(session);

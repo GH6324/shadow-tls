@@ -18,9 +18,11 @@ pub mod prelude {
     pub const TLS_MAJOR: u8 = 0x03;
     pub const TLS_MINOR: (u8, u8) = (0x03, 0x01);
     pub const SNI_EXT_TYPE: u16 = 0;
+    pub const SUPPORTED_VERSIONS_TYPE: u16 = 43;
     pub const TLS_RANDOM_SIZE: usize = 32;
     pub const TLS_HEADER_SIZE: usize = 5;
     pub const TLS_SESSION_ID_SIZE: usize = 32;
+    pub const TLS_13: u16 = 0x0304;
 
     pub const CLIENT_HELLO: u8 = 0x01;
     pub const SERVER_HELLO: u8 = 0x02;

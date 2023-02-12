@@ -283,6 +283,12 @@ impl<LA, TA> ShadowTlsServer<LA, TA> {
         };
         tracing::debug!("ServerRandom extracted: {server_random:?}");
 
+        if !support_tls13(&first_server_frame) {
+            tracing::error!("TLS 1.3 is not supported, will copy bidirectional");
+            copy_bidirectional(&mut in_stream, &mut handshake_stream).await;
+            return Ok(());
+        }
+
         // stage 1.3.1: create HMAC_ServerRandomC and HMAC_ServerRandom
         let mut hmac_sr_c = Hmac::new(&self.password, (&server_random, b"C"));
         let hmac_sr_s = Hmac::new(&self.password, (&server_random, b"S"));
@@ -626,7 +632,7 @@ async fn extract_sni_v2<R: AsyncReadRent>(mut r: R) -> std::io::Result<(Vec<u8>,
             read_ok!(cursor.skip_by_u16(), data);
             continue;
         }
-        tracing::debug!("found SNI extension");
+        tracing::debug!("found server_name extension");
         let _ext_len = read_ok!(cursor.read_u16::<BigEndian>(), data);
         let _sni_len = read_ok!(cursor.read_u16::<BigEndian>(), data);
         // must be host_name
@@ -725,7 +731,7 @@ fn verified_extract_sni(frame: &[u8], password: &str) -> (bool, Option<Vec<u8>>)
             read_ok!(cursor.skip_by_u16());
             continue;
         }
-        tracing::debug!("found SNI extension");
+        tracing::debug!("found server_name extension");
         let _ext_len = read_ok!(cursor.read_u16::<BigEndian>());
         let _sni_len = read_ok!(cursor.read_u16::<BigEndian>());
         // must be host_name
@@ -843,6 +849,44 @@ async fn copy_by_frame_with_modification(
             }
         }
     }
+}
+
+/// Parse ServerHello and return if tls1.3 is supported.
+fn support_tls13(frame: &[u8]) -> bool {
+    if frame.len() < SESSION_ID_LEN_IDX {
+        return false;
+    }
+    let mut cursor = std::io::Cursor::new(&frame[SESSION_ID_LEN_IDX..]);
+    macro_rules! read_ok {
+        ($res: expr) => {
+            match $res {
+                Ok(r) => r,
+                Err(_) => {
+                    return false;
+                }
+            }
+        };
+    }
+
+    // skip session id
+    read_ok!(cursor.skip_by_u8());
+    // skip cipher suites
+    read_ok!(cursor.skip(3));
+    // skip ext length
+    let cnt = read_ok!(cursor.read_u16::<BigEndian>());
+
+    for _ in 0..cnt {
+        let ext_type = read_ok!(cursor.read_u16::<BigEndian>());
+        if ext_type != SUPPORTED_VERSIONS_TYPE {
+            read_ok!(cursor.skip_by_u16());
+            continue;
+        }
+        tracing::debug!("found supported_versions extension");
+        let ext_len = read_ok!(cursor.read_u16::<BigEndian>());
+        let ext_val = read_ok!(cursor.read_u16::<BigEndian>());
+        return ext_len == 2 && ext_val == TLS_13;
+    }
+    false
 }
 
 /// A helper trait for fast read and skip.
